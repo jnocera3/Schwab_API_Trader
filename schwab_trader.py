@@ -64,6 +64,21 @@ def get_config_value(config_file: str, config_string: str):
     return config.get("myvars", config_string)
 
 
+# Function to get account hashes
+def get_account_hashes(endpoint: str, access_token: str):
+
+    # Define headers for request
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    # Make request to get account info
+    content = requests.get(url = endpoint, headers = headers)
+
+    # Open account hashes in JSON format
+    print(json.dumps(content.json(),indent=4))
+
+
 # Function to read settings from a config file
 def read_settings(config_file: str):
 
@@ -136,7 +151,7 @@ def get_quote(endpoint: str, access_token: str, ticker: str, quote_type="stock")
 
     # Convert json to a dictionary
     if quote_type == "stock":
-        return float(content.json()[ticker]['quote']['lastPrice']), float(content.json()[ticker]['quote']['highPrice']), float(content.json()[ticker]['quote']['lowPrice'])
+        return round((float(content.json()[ticker]['quote']['bidPrice'])+float(content.json()[ticker]['quote']['askPrice']))*0.5,3), float(content.json()[ticker]['quote']['highPrice']), float(content.json()[ticker]['quote']['lowPrice'])
     elif quote_type == "option":
         quotes = {}
         for exp_date in content.json()['callExpDateMap']:
@@ -292,7 +307,8 @@ config_file = "schwab_config.ini"
 parser = argparse.ArgumentParser()
 
 # Read in arguments
-parser.add_argument("-get_tokens","--get_tokens", action='store_true', help='Get an updated access and refresh token.')
+parser.add_argument("-get_tokens","--get_tokens", action='store_true', help='Get an updated access token.')
+parser.add_argument("-get_account_hashes","--get_account_hashes", action='store_true', help='Get hash value for all accounts returned in JSON format.')
 parser.add_argument("-get_balance","--get_balance", action='store_true', help='Get current account balance. Use account_type option to set the account. Default is brokerage.')
 parser.add_argument("-account_type","--account_type", required=False, default="brokerage", help='Account type to grab balance or place trades for. Options are ira or brokerage. Default is brokerage.')
 parser.add_argument("-get_quote","--get_quote", required=False, default="None", help='Ticker Symbol to get quote for. Result will be stored in ${TickerSymbol}.csv. Default is None (No quote requested).')
@@ -314,6 +330,15 @@ account_type = args.account_type.lower()
 
 # Get latest access token
 access_token = get_config_value(token_file, "access_token")
+
+# Check to see if account hashes should be grabbed
+if args.get_account_hashes:
+
+    # Define endpint for getting account hashes
+    endpoint = trading_endpoint + "/accounts/accountNumbers"
+
+    # Get account hashes
+    get_account_hashes(endpoint, access_token)
 
 # Check to see if account balance is requested.
 if args.get_balance:

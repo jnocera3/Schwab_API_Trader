@@ -103,3 +103,51 @@ Add the hashes for any account you want to access to schwab_config.ini.
 ```
 brokerage: Hash of brokerage account number
 ```
+
+### Get Account Balance
+
+To get your current brokerage account balance, run this command:
+
+```
+python schwab_trader.py -get_balance
+```
+
+The current balance will be output to a file named schwab_brokerage_balance.csv
+
+The code defaults to getting your brokerage account balance. If you'd like your IRA or any other account balance run this:
+
+```
+python schwab_trader.py -get_balance -account_type ira
+```
+
+This will output your current IRA account balance to a file name schwab_ira_balance.csv.
+
+The account type option should match one of the account types listed in schwab_config.ini.
+
+### Get a Quote
+
+To get a quote, run this command:
+
+```
+python schwab_trader.py -get_quote $STOCK_SYMBOL
+```
+
+where $STOCK_SYMBOL is the ticker of the ETF or stock you want to get a quote for. For example to get a quote for SPY:
+
+```
+python schwab_trader.py -get_quote SPY
+```
+
+This will output the current price, high of the day, low of the day and the resistance level:
+
+```
+SPY quotes valid at 2025-09-11 13:22:37:
+Current Price:     657.325
+High of Day:       657.8
+Low of Day:        653.59
+Resistance Level:  657.8
+```
+
+A file named $STOCK_SYMBOL_max.txt is used to track the all-time high or a resistance level of your choice. If the latest high of the day is greater than the current value in $STOCK_SYMBOL_max.txt then the value in the file will be updated with the high of the day.
+
+In the example for SPY, the SPY_max.txt file will store the resistance level.

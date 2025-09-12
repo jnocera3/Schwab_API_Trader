@@ -151,3 +151,77 @@ Resistance Level:  657.8
 A file named $STOCK_SYMBOL_max.txt is used to track the all-time high or a resistance level of your choice. If the latest high of the day is greater than the current value in $STOCK_SYMBOL_max.txt then the value in the file will be updated with the high of the day.
 
 In the example for SPY, the SPY_max.txt file will store the resistance level.
+
+### Range Trade a Stock or ETF
+
+To range trade a stock or ETF, first setup an option file with the settings for range trading. The file name should be:
+
+```
+schwab_$STOCK_SYMBOL_range_trade.ini
+```
+
+where $STOCK_SYMBOL is the ticker of the ETF or stock you want to range trade. An example is provided in this repo for TMF:
+
+```
+schwab_TMF_range_trade.ini
+```
+
+The first 3 header lines will need to be set:
+
+```
+Shares of $STOCK_SYMBOL to trade: 10
+Max shares of $STOCK_SYMBOL to own: 560
+Ticker to Buy/Sell for Buying Power: BIL
+```
+
+On the first line enter the number of shares you want to trade per trade. On the second line enter the maximum number of shares you want to own. On the third line enter an ETF to use for storing cash to provide buying power for your trades. BIL (1-3 month T-Bill ETF) is a good one to use.
+
+On the remaining lines:
+
+```
+Num Shares, Buy Price, Sell Price
+10, 39.01, 39.81
+20, 38.91, 39.71
+30, 38.81, 39.61
+40, 38.71, 39.51
+50, 38.61, 39.41
+60, 38.51, 39.31
+70, 38.41, 39.21
+80, 38.31, 39.11
+.., ....., .....
+560, 33.51, 34.31
+```
+
+Enter the number of shares to own, the buy price and the sell price at each share count. In the example above, if the shares price falls to 38.41, 70 shares of the position will be bought. The count will stay at 70 until the price moves. The code will automatically enter a limit buy order for 10 shares at 38.31 and a limit sell order for 10 shares at 39.21. If the price moves down to 38.31, an additional 10 shares will be purchased. If the price moves up to 39.21, 10 shares will be sold. After each trade is executed new buy and sell orders will be placed based on the current share count.
+
+Once your option file is setup, you can run the code to range trade:
+
+```
+python schwab_trader.py -range_trade $STOCK_SYMBOL
+```
+
+Example for TMF:
+
+```
+python schwab_trader.py -range_trade TMF
+```
+
+Ideally, set the code to run once per minute throughout the trading day. Since the access token expires after 30 minutes, it's important that you make sure to update it throughout the trading day. Here are sample cron entries for updating the access tokens:
+
+```
+# Update Schwab Tokens every 20 minutes on trading days
+20,40 9 * * 1-5 cd /home/user/schwab; python schwab_trader.py -get_tokens > schwab_trader_get_tokens.out 2>&1
+00,20,40 10-15 * * 1-5 cd /home/user/schwab; python schwab_trader.py -get_tokens > schwab_trader_get_tokens.out 2>&1
+00 16 * * 1-5 cd /home/user/schwab; python schwab_trader.py -get_tokens > schwab_trader_get_tokens.out 2>&1
+```
+
+and here are sample cron entries for running range trading throughout the day:
+
+```
+# Run code to range trade TMF, checking every minute of the trading day
+30 9 * * 1-5 sleep 15; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; mkdir -p TMF/$yyyymmdd > /dev/null; python schwab_trader.py -range_trade TMF -account_type ira > TMF/$yyyymmdd/schwab_trader_range_trade.$hhmm.out 2>&1
+31-59 9 * * 1-5 sleep 15; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; python schwab_trader.py -range_trade TMF -account_type ira > TMF/$yyyymmdd/schwab_trader_range_trade.$hhmm.out 2>&1
+00-59 10-15 * * 1-5 sleep 15; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; python schwab_trader.py -range_trade TMF -account_type ira > TMF/$yyyymmdd/schwab_trader_range_trade.$hhmm.out 2>&1
+```
+
+In the example above, the first entry creates a dated directory for storing the output. This will provide a log of the day's trading. The account_type option is optional. If not specified, trades will be placed in your brokerage account. In the example above, trades are being placed in an IRA account.

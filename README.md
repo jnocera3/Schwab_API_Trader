@@ -9,7 +9,7 @@ Once you have the keys and tokens, schwab_trader.py can be used to:
 - Get a hash for your account numbers
 - Get your account balance
 - Get real-time stock or option chain quotes
-- Run a trading algorithm to sell naked call options in real-time
+- Run a trading algorithm to sell naked call options
 - Run a trading algorithm to range trade
 
 ## Installation

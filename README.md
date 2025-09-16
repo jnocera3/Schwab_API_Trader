@@ -225,3 +225,137 @@ and here are sample cron entries for running range trading throughout the day:
 ```
 
 In the example above, the first entry creates a dated directory for storing the output. This will provide a log of the day's trading. The account_type option is optional. If not specified, trades will be placed in your brokerage account. In the example above, trades are being placed in an IRA account.
+
+### Sell Call Options in a Stock or ETF
+
+To sell naked call options in a stock or ETF, first setup an option file with the settings for selling call options. The file name should be:
+
+```
+schwab_$STOCK_SYMBOL_sell_call_options.ini
+```
+
+where $STOCK_SYMBOL is the ticker of the ETF or stock you want to sell call options in. An example is provided in this repo for SPY:
+
+```
+schwab_SPY_sell_call_options.ini
+```
+
+Here's a description of the settings:
+
+```
+limit_price: Target price to sell to open an option contract for
+min_limit_price: Minimum price to use when searching for a contract to sell
+transition_time: Time in HHMM to transition to trading options for the next day
+num_contracts: Number of contracts to sell to open per trade
+max_contracts: Maximum number of contracts to own in account
+```
+
+Example option file for SPY:
+
+```
+limit_price: 0.17
+min_limit_price: 0.14
+transition_time: 1230
+num_contracts: 3
+max_contracts: 15
+```
+
+**How these settings are used in the code:**
+
+Before 12:30 pm local time, the code will place orders for the current day. After 12:30 pm local time, the code will place orders for the next day.
+
+The code will get option quotes for either the current day or the next trading day depending on the transition time. It will find the contract that has a bid price >= 0.14. The code will place an order to sell to open 3 contracts of SPY at 0.17 or at the ask price if the contract's ask price is > 0.17.
+
+The number of new contracts to sell to open will not be allowed to exceed the max_contracts settings. For example, if your account already owns 15 contracts, then no new orders will be placed. If your account owns 13 contracts, your next order will be to sell to open 2 contracts.
+
+**How does the code manage positions:**
+
+Once an order is filled, the code will automatically place a buy to close order for 0.01 on the new position. The code will also place a new order at a strike price one point higher from the strike price that was filled. The new order will be placed for the current day if the current time is before the transition time or for the next trading day if the current time is after the transition time. After 4:09 pm ET, the code will automatically attempt to close any remaining open positions for the current trading day.
+
+**How does the code handle stops:**
+
+If the current price hits the strike price of an open position, then the position is immediately closed and rolled to a new position. The rolling depends on the time of day. If the current time is before the transition time, then the position is rolled to an option at the next highest strike price and one additional contract is sold to open. For example:
+
+```
+Current position:
+3 647 Current Day calls
+
+Current price:
+647.10
+
+Action:
+Buy to Close 3 647 Current Day calls
+Sell to Open 4 648 Current Day calls
+```
+
+If the current time is after the transition time, then the position is rolled to a contract for the next day at a premium that is at least as much as the cost of closing the position. For example:
+
+```
+Current position:
+3 647 Current Day calls
+
+Current price:
+647.10
+
+Action:
+Buy to Close 3 647 Current Day calls at 0.65
+Sell to Open 4 649 Next Trading Day calls at 0.70
+```
+
+In this example, it is assumed the position is closed for 0.65. The code will automatically loop through the options for the next day and find the one that provides at least as much premium as the cost of closing the current position. In this example, it is assumed that the 649 options were found.
+
+When rolling positions, the number of contracts to sell to open will still be limited by the max_contracts setting.
+
+Once your option file is setup, you can run the code to sell to open call options:
+
+```
+python schwab_trader.py -sell_call_options $STOCK_SYMBOL
+```
+
+Example for SPY:
+
+```
+python schwab_trader.py -sell_call_options SPY
+```
+
+There is also a percent_threshold option which can be set to determine the distance from the resistance level in which call options will be sold.
+
+A file named $STOCK_SYMBOL_max.txt is used to track the all-time high or a resistance level of your choice. If the latest high of the day is greater than the current value in $STOCK_SYMBOL_max.txt then the value in the file will be updated with the high of the day.
+
+Example of setting a percent threshold option:
+
+```
+python schwab_trader.py -sell_call_options SPY -percent_threshold 3.0
+```
+
+These options will sell calls in SPY as long as the current price is within 3% of the value in the SPY_max.txt file. If the percent_threshold option is not set, then a default of 1.5% is used.
+
+Another feature of the code is that it reduces the number of contracts to sell to open as the price moves further away from the resistance level. For example, if you are set to sell to open 3 contracts per trade and the percent threshold is set to 3% then the code will:
+
+- Sell 3 contracts if the price is within 1% of the resistance level
+- Sell 2 contracts if the price is within 1%-2% of the resistance level
+- Sell 1 contract if the price is within 2%-3% of the resistance level
+- Not place any orders if the price is >3% from the resistance level
+
+If you don't want to use the feature that reduces contracts to sell to open, then set the percent_threshold to a high number such that the price will always be well within the threshold.
+
+Ideally, the code should be set to run once per minute throughout the trading day. Since the access token expires after 30 minutes, it's important that you make sure to update it throughout the trading day. Here are sample cron entries for updating the access tokens:
+
+```
+# Update Schwab Tokens every 20 minutes on trading days
+20,40 9 * * 1-5 cd /home/user/schwab; python schwab_trader.py -get_tokens > schwab_trader_get_tokens.out 2>&1
+00,20,40 10-15 * * 1-5 cd /home/user/schwab; python schwab_trader.py -get_tokens > schwab_trader_get_tokens.out 2>&1
+00 16 * * 1-5 cd /home/user/schwab; python schwab_trader.py -get_tokens > schwab_trader_get_tokens.out 2>&1
+```
+
+and here are sample cron entries for selling call options throughout the day:
+
+```
+# Run code to sell SPY call options every minute of the trading day
+30 9 * * 1-5 sleep 30; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; mkdir -p SPY/$yyyymmdd > /dev/null; python schwab_trader.py -sell_call_options SPY > SPY/$yyyymmdd/schwab_trader_sell_call_options.$hhmm.out 2>&1
+31-59 9 * * 1-5 sleep 30; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; python schwab_trader.py -sell_call_options SPY > SPY/$yyyymmdd/schwab_trader_sell_call_options.$hhmm.out 2>&1
+00-59 10-15 * * 1-5 sleep 30; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; python schwab_trader.py -sell_call_options SPY > SPY/$yyyymmdd/schwab_trader_sell_call_options.$hhmm.out 2>&1
+00-14 16 * * 1-5 sleep 30; yyyymmdd=`date +\%Y\%m\%d`; hhmm=`date +\%H\%M`; cd /home/user/schwab; python schwab_trader.py -sell_call_options SPY > SPY/$yyyymmdd/schwab_trader_sell_call_options.$hhmm.out 2>&1
+```
+
+In the example above, the first entry creates a dated directory for storing the output. This will provide a log of the day's trading.

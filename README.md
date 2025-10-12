@@ -194,6 +194,14 @@ Num Shares, Buy Price, Sell Price
 
 Enter the number of shares to own, the buy price and the sell price at each share count. In the example above, if the shares price falls to 38.41, 70 shares of the position will be bought. The count will stay at 70 until the price moves. The code will automatically enter a limit buy order for 10 shares at 38.31 and a limit sell order for 10 shares at 39.21. If the price moves down to 38.31, an additional 10 shares will be purchased. If the price moves up to 39.21, 10 shares will be sold. After each trade is executed new buy and sell orders will be placed based on the current share count.
 
+The script:
+
+```
+range_trade_setup.py
+```
+
+can be used to print out the shares to own, the buy price and the sell price which can then be easily copied and pasted into the option file.
+
 Once your option file is setup, you can run the code to range trade:
 
 ```

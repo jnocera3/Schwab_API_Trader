@@ -226,6 +226,7 @@ def place_order(
     complex_order_strategy_type="NONE",
     tax_lot_method="FIFO",
     order_strategy_type="SINGLE",
+    special_instructions="NONE"
 ):
 
     order_payload = {
@@ -251,6 +252,10 @@ def place_order(
         ],
         "orderStrategyType": order_strategy_type,
     }
+
+#   Add special instructions if provided
+    if special_instructions != "NONE":
+        order_payload["specialInstruction"] = special_instructions
 
     # Define headers for request
     headers = {
@@ -588,7 +593,8 @@ if args.range_trade != "None":
                                            order_leg_type="EQUITY",
                                            asset_type="EQUITY",
                                            position_effect="OPENING",
-                                           price=orders[order][3])
+                                           price=orders[order][3],
+                                           special_instructions="ALL_OR_NONE")
                             # Check order status
                             if order_status == 201:
                                 print ("Order successfully placed to buy " + str(orders[order][2]) + " shares of " + orders[order][0] + " at limit price of " + str(orders[order][3]))
@@ -610,7 +616,8 @@ if args.range_trade != "None":
                                order_leg_type="EQUITY",
                                asset_type="EQUITY",
                                position_effect="OPENING",
-                               price=orders[order][3])
+                               price=orders[order][3],
+                               special_instructions="ALL_OR_NONE")
                 # Check order status
                 if order_status == 201:
                     print ("Order successfully placed to buy " + str(orders[order][2]) + " shares of " + orders[order][0] + " at limit price of " + str(orders[order][3]))
@@ -630,7 +637,8 @@ if args.range_trade != "None":
                            order_leg_type="EQUITY",
                            asset_type="EQUITY",
                            position_effect="OPENING",
-                           price=orders[order][3])
+                           price=orders[order][3],
+                           special_instructions="ALL_OR_NONE")
             # Check order status
             if order_status == 201:
                 print ("Order successfully placed to sell " + str(orders[order][2]) + " shares of " + orders[order][0] + " at limit price of " + str(orders[order][3]))

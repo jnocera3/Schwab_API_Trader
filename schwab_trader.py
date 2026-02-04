@@ -105,6 +105,18 @@ def read_settings_range_trade(option_file: str):
     return shares, max_shares, buying_power_ticker, trade_ranges
 
 
+# Function to read daily rebalance settings from a file
+def read_settings_daily_rebalance(option_file: str):
+
+    # Read variables from input file
+    with open(option_file, 'r') as file:
+        available_cash = float(file.readline().split(':')[1])
+        min_position = float(file.readline().split(':')[1])
+        max_position = float(file.readline().split(':')[1])
+        buying_power_ticker = file.readline().split(':')[1].strip()
+    return available_cash, min_position, max_position, buying_power_ticker
+
+
 # Function to get account balance
 def get_account_info(endpoint: str, access_token: str, info_type: str, ticker="None", assetType=["OPTION"]):
 
@@ -320,6 +332,7 @@ parser.add_argument("-get_quote","--get_quote", required=False, default="None", 
 parser.add_argument("-sell_call_options","--sell_call_options", required=False, default="None", help='Ticker Symbol to sell call options for. Default is None. If set, this will automatically get a quote for the ticker. A threshold for %% from resistance level can be set with the -percent_threshold option. The default threshold is 1.5%%. Option file schwab_$ticker_sell_call_options.ini is required.')
 parser.add_argument("-percent_threshold","--percent_threshold", required=False, default=1.5, help='Percent threshold from resistance level in which options trading is allowed. If outside this threshold, no new option trades will be placed. Default is 1.5.')
 parser.add_argument("-range_trade","--range_trade", required=False, default="None", help='Ticker Symbol to range trade for. Default is None. Option file schwab_$ticker_range_trade.ini with settings for trading is required.')
+parser.add_argument("-daily_rebalance","--daily_rebalance", required=False, default="None", help='Ticker Symbol to use for daily reblancing. Default is None. Option file schwab_$ticker_daily_rebalance.ini with settings for trading is required.')
 
 # Parse the input
 args = parser.parse_args()
@@ -372,9 +385,11 @@ if args.get_balance:
     balance_out.write(str(timestamp) + ", " + str(account_balance) + "\n")
     balance_out.close()
 
-# Set ticker to use for quote and/or options trading
+# Set ticker to use for quote and/or options or daily rebalance trading
 if args.sell_call_options != "None":
     ticker = args.sell_call_options
+elif args.daily_rebalance != "None":
+    ticker = args.daily_rebalance
 elif args.get_quote != "None": 
     ticker = args.get_quote
 else:
@@ -678,6 +693,184 @@ if args.range_trade != "None":
                 print ("Order successfully placed to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
             else:
                 print ("FAILED to place order to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
+
+
+# Check for daily rebalance
+if args.daily_rebalance != "None":
+
+    # Define file containing settings for daily rebalacning
+    settings_file = "schwab_" + args.daily_rebalance + "_daily_rebalance.ini"
+
+    # Check to make sure settings file is present
+    if not os.path.exists(settings_file):
+        print("Option file: " + settings_file + " does not exist. Exiting")
+        sys.exit(1)
+
+    # Read variables from settings file
+    available_cash, min_position, max_position, buying_power_ticker = read_settings_daily_rebalance(settings_file)
+
+    # Define current day, trading day and set year to pull holidays for
+    current_yyyymmdd = datetime.datetime.now().strftime("%Y%m%d")
+    this_year = current_yyyymmdd[0:4]
+    year_list = [this_year]
+    current_trading_day = current_yyyymmdd[0:4] + "-" + current_yyyymmdd[4:6] + "-" + current_yyyymmdd[6:8]
+
+    # Call function to get list of holidays for this year and next year
+    holiday_dates = get_holidays(year_list)
+
+    # Check if current day is a holiday
+    if datetime.datetime.now() in holiday_dates:
+        print("Today is a market holiday. No trading today. Exiting")
+        sys.exit(1)
+
+    # Compute fraction below resistance level (ATH)
+    percent_below = ((resistance_level - current) / resistance_level) * 100.0
+    print("%Below Resistance: " + str(round(percent_below,3)) + "\n")
+
+    # Compute number of shares of stock which should be held
+    if percent_below <= min_position:
+        nshares = 0
+    elif percent_below >= max_position:
+        nshares = int(available_cash / current)
+    elif percent_below > min_position and percent_below < max_position:
+        fraction_to_own = ((percent_below - min_position) / (max_position - min_position))
+        nshares = int((available_cash * fraction_to_own) / current)
+
+    # Get account type hash
+    account_hash = get_config_value(config_file, account_type)
+
+    # Define endpoint for orders
+    orders_endpoint = trading_endpoint + "/accounts/" + account_hash + "/orders"
+
+    # Define endpoint for account positions
+    account_endpoint = trading_endpoint + "/accounts/" + account_hash + "?fields=positions"
+
+    # Get list of current stock positions
+    buying_power, account_positions = get_account_info(account_endpoint, access_token, "positions", args.daily_rebalance, ["stock", buying_power_ticker])
+    print("BEFORE Rebalancing:")
+    print("Account Buying Power: " + str(buying_power))
+    if buying_power_ticker not in account_positions:
+        account_positions[buying_power_ticker] = 0
+    if args.daily_rebalance not in account_positions:
+        account_positions[args.daily_rebalance] = 0
+    print(buying_power_ticker + " shares owned: " + str(account_positions[buying_power_ticker]))
+    print(args.daily_rebalance + " shares owned: " + str(account_positions[args.daily_rebalance]))
+
+    # Check on order type
+    # BUY order
+    if nshares > account_positions[args.daily_rebalance]:
+        # Compute number of shares to buy
+        nshares_to_buy = nshares - account_positions[args.daily_rebalance]
+        # Compute estimated buying power needed
+        needed_buying_power = nshares_to_buy * current
+        # Defined endpoint for quote
+        quote_endpoint = marketdata_endpoint + "/quotes?symbols=" + buying_power_ticker + "&fields=quote&indicative=false"
+        # Get latest quote for buying power ticker
+        current, highofday, lowofday = get_quote(quote_endpoint, access_token, buying_power_ticker)
+        # Compute number of shares needed to sell to raise buying power
+        sell_shares = int(needed_buying_power / highofday) + 1
+        # Place market order to sell to raise buying power
+        print ("Placing market order to sell " + str(sell_shares) + " shares of " + buying_power_ticker)
+        order_status = place_order(
+                       endpoint=orders_endpoint,
+                       access_token=access_token,
+                       symbol=buying_power_ticker, 
+                       order_type="MARKET", 
+                       instruction="SELL", 
+                       quantity=sell_shares,
+                       order_leg_type="EQUITY",
+                       asset_type="EQUITY",
+                       position_effect="CLOSING")
+        # Check order status
+        if order_status == 201:
+            print ("Order successfully placed to sell " + str(sell_shares) + " shares of " + buying_power_ticker)
+            # Loop to see if order has been filled and buying power has increased
+            for i in range(7):
+                print("Sleeping 5 seconds. Waiting for market order to be filled")
+                time.sleep(5)
+                buying_power, account_positions = get_account_info(account_endpoint, access_token, "positions", args.daily_rebalance, ["stock", buying_power_ticker])
+                if buying_power >= needed_buying_power:
+                    print ("Order to sell " + str(sell_shares) + " shares of " + buying_power_ticker + " has been filled. \nPlacing market order to buy " + str(nshares_to_buy) + " shares of " + args.daily_rebalance)
+                    order_status = place_order(
+                                   endpoint=orders_endpoint,
+                                   access_token=access_token,
+                                   symbol=args.daily_rebalance,
+                                   order_type="MARKET", 
+                                   instruction="BUY",
+                                   quantity=nshares_to_buy,
+                                   order_leg_type="EQUITY",
+                                   asset_type="EQUITY",
+                                   position_effect="OPENING")
+                    # Check order status
+                    if order_status == 201:
+                        print ("Order successfully placed to buy " + str(nshares_to_buy) + " shares of " + args.daily_rebalance)
+                    else:
+                        print ("FAILED to place order to buy " + str(nshares_to_buy) + " shares of " + args.daily_rebalance)
+                    # Exit from loop
+                    break
+
+    # SELL order
+    elif nshares < account_positions[args.daily_rebalance]:
+        # Compute number of shares to sell
+        nshares_to_sell = account_positions[args.daily_rebalance] - nshares
+        # Compute estimated proceeds from sale
+        proceeds = nshares_to_sell * current
+        # Defined endpoint for quote
+        quote_endpoint = marketdata_endpoint + "/quotes?symbols=" + buying_power_ticker + "&fields=quote&indicative=false"
+        # Get latest quote for buying power ticker
+        current, highofday, lowofday = get_quote(quote_endpoint, access_token, buying_power_ticker)
+        # Compute number of shares needed to buy of buying power ticker
+        buy_shares = int(proceeds / highofday)
+        # Place market order to sell to raise buying power
+        print ("Placing market order to sell " + str(nshares_to_sell) + " shares of " + args.daily_rebalance)
+        order_status = place_order(
+                       endpoint=orders_endpoint,
+                       access_token=access_token,
+                       symbol=args.daily_rebalance,
+                       order_type="MARKET", 
+                       instruction="SELL", 
+                       quantity=nshares_to_sell,
+                       order_leg_type="EQUITY",
+                       asset_type="EQUITY",
+                       position_effect="CLOSING")
+        # Check order status
+        if order_status == 201:
+            print ("Order successfully placed to sell " + str(nshares_to_sell) + " shares of " + args.daily_rebalance)
+            # Loop to see if order has been filled and buying power has increased
+            for i in range(7):
+                print("Sleeping 5 seconds. Waiting for market order to be filled")
+                time.sleep(5)
+                buying_power, account_positions = get_account_info(account_endpoint, access_token, "positions", args.daily_rebalance, ["stock", buying_power_ticker])
+                if buying_power >= proceeds:
+                    print ("Order to sell " + str(nshares_to_sell) + " shares of " + args.daily_rebalanc + " has been filled. \nPlacing market order to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
+                    order_status = place_order(
+                                   endpoint=orders_endpoint,
+                                   access_token=access_token,
+                                   symbol=buying_power_ticker,
+                                   order_type="MARKET", 
+                                   instruction="BUY",
+                                   quantity=buy_shares,
+                                   order_leg_type="EQUITY",
+                                   asset_type="EQUITY",
+                                   position_effect="OPENING")
+                    # Check order status
+                    if order_status == 201:
+                        print ("Order successfully placed to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
+                    else:
+                        print ("FAILED to place order to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
+                    # Exit from loop
+                    break
+
+    # Get list of current stock positions after rebalancing
+    buying_power, account_positions = get_account_info(account_endpoint, access_token, "positions", args.daily_rebalance, ["stock", buying_power_ticker])
+    print("\nAFTER Rebalancing:")
+    print("Account Buying Power: " + str(buying_power))
+    if buying_power_ticker not in account_positions:
+        account_positions[buying_power_ticker] = 0
+    if args.daily_rebalance not in account_positions:
+        account_positions[args.daily_rebalance] = 0
+    print(buying_power_ticker + " shares owned: " + str(account_positions[buying_power_ticker]))
+    print(args.daily_rebalance + " shares owned: " + str(account_positions[args.daily_rebalance]))
 
 
 # Check for options trading

@@ -11,6 +11,7 @@ Once you have the keys and tokens, schwab_trader.py can be used to:
 - Get real-time stock or option chain quotes
 - Run a trading algorithm to sell naked call options
 - Run a trading algorithm to range trade
+- Run a module to rebalance your portfolio
 
 ## Installation
 
@@ -32,6 +33,7 @@ usage: schwab_trader.py [-h] [-get_tokens] [-get_account_hashes] [-get_balance]
                         [-account_type ACCOUNT_TYPE] [-get_quote GET_QUOTE]
                         [-sell_call_options SELL_CALL_OPTIONS]
                         [-percent_threshold PERCENT_THRESHOLD] [-range_trade RANGE_TRADE]
+                        [-rebalance REBALANCE]
 
 options:
   -h, --help            show this help message and exit
@@ -61,6 +63,10 @@ options:
   -range_trade RANGE_TRADE, --range_trade RANGE_TRADE
                         Ticker Symbol to range trade for. Default is None. Option file
                         schwab_$ticker_range_trade.ini with settings for trading is required.
+  -rebalance REBALANCE, --rebalance REBALANCE
+                        Ticker Symbol to use for reblancing. Default is None. Option
+                        file schwab_$ticker_rebalance.ini with settings for trading is
+                        required.
 ```
 
 In order to access the API, first add your Schwab Developer App Key and Secret to schwab_config.ini:
@@ -233,6 +239,59 @@ and here are sample cron entries for running range trading throughout the day:
 ```
 
 In the example above, the first entry creates a dated directory for storing the output. This will provide a log of the day's trading. The account_type option is optional. If not specified, trades will be placed in your brokerage account. In the example above, trades are being placed in an IRA account.
+
+### Rebalance a portfolio
+
+To rebalance a portfolio between two stocks or ETFs, first setup an option file with the settings for rebalancing. The file name should be:
+
+```
+schwab_$STOCK_SYMBOL_rebalance.ini
+```
+
+where $STOCK_SYMBOL is the ticker of the ETF or stock you want to primarily own. An example is provided in this repo for VOO:
+
+```
+schwab_VOO_rebalance.ini
+```
+
+The 4 lines in this file will need to be set:
+
+```
+Available Cash: 150000
+Min Position % from ATH: 0
+Max Position % from ATH: 30
+Ticker to Buy/Sell for Buying Power: BIL
+```
+
+Here's a description of each line:
+
+```
+Available Cash: Total amount of cash to use in your portfolio
+Min Position % from ATH: Percent amount from an all-time high (ATH) your primary position has to be before investing in it
+Max Position % from ATH: Percent amount from an all-time high (ATH) your primary position has to be before being fully invested (100%)
+Ticker to Buy/Sell for Buying Power: Stock or ETF to put the amount of your portfolio that is currently not invested in your primary position
+```
+
+In the example for VOO above the portfolio will use $150,000 cash. It will start buying shares of VOO as soon as the share price dips far enough below VOO's all-time high to enable at least one share to be bought. It will keep buying shares of VOO until VOO's price dips to 30% from an all-time high. At that point all $150,000 in the portfolio will be invested in VOO. Any cash that is not invested in VOO, will be used to buy shares of BIL.
+
+Once your option file is setup, you can run the code to rebalance your portfolio:
+
+```
+python schwab_trader.py -rebalance $STOCK_SYMBOL
+```
+
+Example for VOO:
+
+```
+python schwab_trader.py -rebalance VOO
+```
+
+The code can be set to run as often as you would like. Here's an example for running at the end of each trading day while also updating the access tokens:
+
+```
+# Run code to rebalance VOO/BIL position at end of trading day
+59 15 * * 1-5 yyyymmdd=`date +\%Y\%m\%d`; cd /home/user/schwab; python schwab_trader.py -get_tokens -rebalance VOO > VOO/schwab_trader_rebalance.$yyyymmdd.out 2>&1
+```
 
 ### Sell Call Options in a Stock or ETF
 

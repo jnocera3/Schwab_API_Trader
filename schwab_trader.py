@@ -842,7 +842,7 @@ if args.rebalance != "None":
                 time.sleep(5)
                 buying_power, account_positions = get_account_info(account_endpoint, access_token, "positions", args.rebalance, ["stock", buying_power_ticker])
                 if buying_power >= proceeds:
-                    print ("Order to sell " + str(nshares_to_sell) + " shares of " + args.rebalanc + " has been filled. \nPlacing market order to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
+                    print ("Order to sell " + str(nshares_to_sell) + " shares of " + args.rebalance + " has been filled. \nPlacing market order to buy " + str(buy_shares) + " shares of " + buying_power_ticker)
                     order_status = place_order(
                                    endpoint=orders_endpoint,
                                    access_token=access_token,

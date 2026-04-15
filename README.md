@@ -254,12 +254,13 @@ where $STOCK_SYMBOL is the ticker of the ETF or stock you want to primarily own.
 schwab_VOO_rebalance.ini
 ```
 
-The 4 lines in this file will need to be set:
+The 5 lines in this file will need to be set:
 
 ```
-Available Cash: 150000
+Available Cash: 200000
 Min Position % from ATH: 0
 Max Position % from ATH: 30
+Min Allocation % of stock at ATH: 1
 Ticker to Buy/Sell for Buying Power: BIL
 ```
 
@@ -269,10 +270,11 @@ Here's a description of each line:
 Available Cash: Total amount of cash to use in your portfolio
 Min Position % from ATH: Percent amount from an all-time high (ATH) your primary position has to be before investing in it
 Max Position % from ATH: Percent amount from an all-time high (ATH) your primary position has to be before being fully invested (100%)
+Min Allocation % of stock at ATH: Percent amount to invest in your primary position at an all-time high (ATH)
 Ticker to Buy/Sell for Buying Power: Stock or ETF to put the amount of your portfolio that is currently not invested in your primary position
 ```
 
-In the example for VOO above the portfolio will use $150,000 cash. It will start buying shares of VOO as soon as the share price dips far enough below VOO's all-time high to enable at least one share to be bought. It will keep buying shares of VOO until VOO's price dips to 30% from an all-time high. At that point all $150,000 in the portfolio will be invested in VOO. Any cash that is not invested in VOO, will be used to buy shares of BIL.
+In the example for VOO above the portfolio will use $200,000 cash. It will allocate 1% of the portfolio ($2,000) to VOO when VOO is at an all-time high. It will start buying more shares of VOO as soon as the share price dips far enough below VOO's all-time high to enable at least one share to be bought. It will keep buying shares of VOO until VOO's price dips to 30% from an all-time high. At that point all $200,000 in the portfolio will be invested in VOO. Any cash that is not invested in VOO, will be used to buy shares of BIL.
 
 Once your option file is setup, you can run the code to rebalance your portfolio:
 

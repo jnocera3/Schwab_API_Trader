@@ -113,8 +113,9 @@ def read_settings_rebalance(option_file: str):
         available_cash = float(file.readline().split(':')[1])
         min_position = float(file.readline().split(':')[1])
         max_position = float(file.readline().split(':')[1])
+        min_allocation = float(file.readline().split(':')[1]) * 0.01
         buying_power_ticker = file.readline().split(':')[1].strip()
-    return available_cash, min_position, max_position, buying_power_ticker
+    return available_cash, min_position, max_position, min_allocation, buying_power_ticker
 
 
 # Function to get account balance
@@ -707,7 +708,7 @@ if args.rebalance != "None":
         sys.exit(1)
 
     # Read variables from settings file
-    available_cash, min_position, max_position, buying_power_ticker = read_settings_rebalance(settings_file)
+    available_cash, min_position, max_position, min_allocation, buying_power_ticker = read_settings_rebalance(settings_file)
 
     # Define current day, trading day and set year to pull holidays for
     current_yyyymmdd = datetime.datetime.now().strftime("%Y%m%d")
@@ -727,14 +728,16 @@ if args.rebalance != "None":
     percent_below = ((resistance_level - current) / resistance_level) * 100.0
     print("%Below Resistance: " + str(round(percent_below,3)) + "\n")
 
-    # Compute number of shares of stock which should be held
+    # Compute fraction of shares to own
     if percent_below <= min_position:
-        nshares = 0
+        fraction_to_own = min_allocation
     elif percent_below >= max_position:
-        nshares = int(available_cash / current)
+        fraction_to_own = 1.0
     elif percent_below > min_position and percent_below < max_position:
-        fraction_to_own = ((percent_below - min_position) / (max_position - min_position))
-        nshares = int((available_cash * fraction_to_own) / current)
+        fraction_to_own = (percent_below - min_position) / ((max_position - min_position) / (1.0 - min_allocation)) + min_allocation
+
+    # Compute number of shares of stock to own
+    nshares = int((available_cash * fraction_to_own) / current)
 
     # Get account type hash
     account_hash = get_config_value(config_file, account_type)
